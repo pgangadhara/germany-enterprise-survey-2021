@@ -1,0 +1,136 @@
+
+---
+title: "Germany 2021 Enterprise Survey - Final Analysis"
+author: "Praharsha Gangadhara"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1. Introduction
+
+This project explores the Germany 2021 Enterprise Survey dataset to uncover business insights post-COVID, especially focusing on digital adoption, infrastructure, and firm performance. We utilize techniques learned throughout the course such as data cleaning, summarization, and visualization.
+
+## 2. Loading Libraries and Data
+
+```{r}
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(caret)
+library(cluster)
+library(factoextra)
+library(rpart)
+library(rpart.plot)
+
+# Load data
+data <- read_csv("C:/Users/praha/Downloads/Germany_2021_ES.csv")
+glimpse(data)
+```
+
+## 3. Data Cleaning and Preparation
+
+We first examine missing values, select relevant variables, and prepare data for analysis.
+
+```{r}
+# Check missing data
+missing_summary <- colSums(is.na(data))
+missing_summary[missing_summary > 0]
+
+# Select relevant columns for analysis
+analysis_data <- data %>%
+  select(id, COVc4a, c6, c7, c8a, c8b, d2, EUd1c, f1, l1) %>%
+  rename(
+    online_business = COVc4a,
+    power_outage = c6,
+    outage_count = c7,
+    outage_hours = c8a,
+    outage_minutes = c8b,
+    annual_sales = d2,
+    online_sales_pct = EUd1c,
+    capacity_util = f1,
+    fulltime_workers = l1
+  )
+```
+
+## 4. Exploratory Data Analysis (EDA)
+
+### 4.1 Digital Adoption Due to COVID-19
+
+```{r}
+analysis_data %>%
+  count(online_business) %>%
+  mutate(Response = recode(online_business, `1` = "Yes", `2` = "No", `-9` = "Don't know")) %>%
+  ggplot(aes(x = Response, y = n, fill = Response)) +
+  geom_col() +
+  labs(title = "Digital Adoption Due to COVID-19", x = "Response", y = "Number of Firms")
+```
+
+### 4.2 Power Outage Frequency
+
+```{r}
+analysis_data %>%
+  filter(!is.na(power_outage)) %>%
+  count(power_outage) %>%
+  mutate(PowerOutage = recode(power_outage, `1` = "Yes", `2` = "No", `-9` = "Don't know")) %>%
+  ggplot(aes(x = PowerOutage, y = n, fill = PowerOutage)) +
+  geom_col() +
+  labs(title = "Firms Experiencing Power Outages", x = "Response", y = "Number of Firms")
+```
+
+## 5. Relationship Analysis
+
+### 5.1 Sales vs. Online Activity
+
+```{r}
+ggplot(analysis_data, aes(x = as.factor(online_business), y = annual_sales)) +
+  geom_boxplot() +
+  labs(title = "Annual Sales vs. Online Activity", x = "Online Business Due to COVID", y = "Annual Sales (EUR)")
+```
+
+### 5.2 Capacity Utilization vs. Power Outages
+
+```{r}
+ggplot(analysis_data, aes(x = as.factor(power_outage), y = capacity_util)) +
+  geom_boxplot() +
+  labs(title = "Capacity Utilization vs. Power Outages", x = "Power Outage Experience", y = "Capacity Utilization (%)")
+```
+
+#6. Logistic Regression: Predictors of Online Adoption
+
+```{r}
+# Recode target variable to 0/1
+analysis_data$online_business <- ifelse(analysis_data$online_business %in% c("Yes", "yes", "Adopted", "1"), 1, 0)
+
+logit_model <- glm(online_business ~ power_outage + outage_count + outage_hours +
+                   annual_sales + online_sales_pct + capacity_util + fulltime_workers,
+                   data = analysis_data,
+                   family = binomial)
+
+summary(logit_model)
+```
+
+## 7. Clustering: Firms Based on Adoption, Sales, Outages
+
+```{r}
+cluster_data <- analysis_data %>%
+  select(annual_sales, outage_count, online_sales_pct) %>%
+  drop_na() %>%
+  scale()
+
+# Elbow method for k
+fviz_nbclust(cluster_data, kmeans, method = "wss")
+
+# K-means clustering
+set.seed(123)
+km <- kmeans(cluster_data, centers = 3, nstart = 25)
+
+# Cluster plot
+fviz_cluster(km, data = cluster_data)
+```
+
+
